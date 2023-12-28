@@ -167,16 +167,36 @@ void displayRowToPlaceSelectedTilesOnConsole(char rowToPlaceSelectedTiles[ROW_TO
     std::cout << std::endl;
 }
 
+void initializeRowInLayer(char* row, size_t cols)
+{
+    std::fill_n(row, cols, EMPTY_POSITION);
+}
+
+void initializeLayer(size_t rows, size_t cols, char**& layer)
+{
+    for (int i = 0; i < rows; ++i)
+    {
+        initializeRowInLayer(layer[i], cols);
+    }
+}
+
 char** createAndInitializeLayer(size_t rows, size_t cols)
 {
     char** layer = new char* [rows];
+
     for (int i = 0; i < rows; ++i)
     {
         layer[i] = new char[cols];
-        std::fill_n(layer[i], cols, EMPTY_POSITION);
     }
 
+    initializeLayer(rows, cols, layer);
+
     return layer;
+}
+
+void initializeRowToPlaceSelectedTiles(char(&rowToPlaceSelectedTiles)[ROW_TO_PLACE_TILES_SIZE])
+{
+    std::fill_n(rowToPlaceSelectedTiles, ROW_TO_PLACE_TILES_SIZE, EMPTY_POSITION);
 }
 
 size_t* generateNumberOfTilesByType(size_t rows, size_t cols, size_t tileTypes, unsigned& allTilesInLayer)
@@ -225,11 +245,9 @@ void placeAllTilesOnRandomPositions(size_t rows, size_t cols, size_t tileTypes,
     }
 }
 
-char** createLevel(size_t& currentRows, size_t& currentCols, size_t& currentTileTypes, 
-    char*& currentSymbolsForTilesByType, unsigned& allTilesInLayer)
+char** createLevel(size_t& rows, size_t& cols, size_t& tileTypes, 
+    size_t*& currentNumbersOfTilesByType, char*& currentSymbolsForTilesByType, unsigned& allTilesInLayer)
 {
-    size_t rows, cols, tileTypes;
-
     // validate rows
     std::cout << "Enter number of rows in the range [5, 20]: ";
     std::cin >> rows;
@@ -241,7 +259,6 @@ char** createLevel(size_t& currentRows, size_t& currentCols, size_t& currentTile
         std::cout << "Enter number of rows in the range [5, 20]: ";
         std::cin >> rows;
     }
-    currentRows = rows;
 
     // validate cols
     std::cout << "Enter number of cols in the range [5, 20]: ";
@@ -254,7 +271,6 @@ char** createLevel(size_t& currentRows, size_t& currentCols, size_t& currentTile
         std::cout << "Enter number of cols in the range [5, 20]: ";
         std::cin >> cols;
     }
-    currentCols = cols;
 
     // validate tile types
     std::cout << "Enter number of tile types in the range [8, 20]: ";
@@ -267,8 +283,6 @@ char** createLevel(size_t& currentRows, size_t& currentCols, size_t& currentTile
         std::cout << "Enter number of tile types in the range [8, 20]: ";
         std::cin >> tileTypes;
     }
-    currentTileTypes = tileTypes;
-
 
     // create and initialize layer
     char** layer = createAndInitializeLayer(rows, cols);
@@ -297,18 +311,29 @@ char** createLevel(size_t& currentRows, size_t& currentCols, size_t& currentTile
     currentSymbolsForTilesByType = symbolsForTilesByType;
 
     // generate number of tiles by type
-    size_t* numbersOfTilesByType = generateNumberOfTilesByType(rows, cols, tileTypes, allTilesInLayer);
+    delete[] currentNumbersOfTilesByType;
+    currentNumbersOfTilesByType = generateNumberOfTilesByType(rows, cols, tileTypes, allTilesInLayer);
 
     // generate position for each tile
-    placeAllTilesOnRandomPositions(rows, cols, tileTypes, numbersOfTilesByType, symbolsForTilesByType, layer);
-
-    delete[] numbersOfTilesByType;
+    placeAllTilesOnRandomPositions(rows, cols, tileTypes, currentNumbersOfTilesByType, symbolsForTilesByType, layer);
 
     return layer;
 }
 
+void restartLevel(size_t rows, size_t cols, size_t tileTypes,
+    size_t* numbersOfTilesByType, char* symbolsForTilesByType, unsigned& allTilesInLayer,
+    char**& layer, char(&rowToPlaceSelectedTiles)[ROW_TO_PLACE_TILES_SIZE])
+{
+    initializeLayer(rows, cols, layer);
+    placeAllTilesOnRandomPositions(rows, cols, tileTypes, numbersOfTilesByType, symbolsForTilesByType, layer);
+    displayLayerOnConsoleUsingColors(rows, cols, tileTypes, symbolsForTilesByType, layer);
+
+    initializeRowToPlaceSelectedTiles(rowToPlaceSelectedTiles);
+    displayRowToPlaceSelectedTilesOnConsole(rowToPlaceSelectedTiles);
+}
+
 void playAtLevel(size_t rows, size_t cols, size_t tileTypes,
-    char* symbolsForTilesByType, unsigned& allTilesInLayer, 
+    size_t* numbersOfTilesByType, char* symbolsForTilesByType, unsigned& allTilesInLayer,
     char**& layer, char (&rowToPlaceSelectedTiles)[ROW_TO_PLACE_TILES_SIZE])
 {
     unsigned row, col;
@@ -327,7 +352,14 @@ void playAtLevel(size_t rows, size_t cols, size_t tileTypes,
         if (isDefeatPresent(rowToPlaceSelectedTiles))
         {
             std::cout << "DEFEAT!" << std::endl;
-            break;
+
+            char answer;
+            std::cout << "Do you want to restart the game? (Y / N)" << std::endl << ">> ";
+            std::cin >> answer;
+
+            if (answer == 'N') break;
+
+            restartLevel(rows, cols, tileTypes, numbersOfTilesByType, symbolsForTilesByType, allTilesInLayer, layer, rowToPlaceSelectedTiles);
         }
 
         std::cout << "Enter row and col of tile you want to select: ";
@@ -366,21 +398,22 @@ void playAtLevel(size_t rows, size_t cols, size_t tileTypes,
 int main()
 {
     size_t rows, cols, tileTypes;
+    size_t* numbersOfTilesByType = new size_t[MAX_TILE_TYPES];
     char* symbolsForTilesByType = new char[MAX_TILE_TYPES];
     unsigned allTilesInLayer = 0;
 
-    char** layer = createLevel(rows, cols, tileTypes, symbolsForTilesByType, allTilesInLayer);
+    char** layer = createLevel(rows, cols, tileTypes, numbersOfTilesByType, symbolsForTilesByType, allTilesInLayer);
     displayLayerOnConsoleUsingColors(rows, cols, tileTypes, symbolsForTilesByType, layer);
 
     char rowToPlaceSelectedTiles[ROW_TO_PLACE_TILES_SIZE];
-    std::fill_n(rowToPlaceSelectedTiles, ROW_TO_PLACE_TILES_SIZE, EMPTY_POSITION);
+    initializeRowToPlaceSelectedTiles(rowToPlaceSelectedTiles);
     displayRowToPlaceSelectedTilesOnConsole(rowToPlaceSelectedTiles);
 
-    playAtLevel(rows, cols, tileTypes, symbolsForTilesByType, allTilesInLayer, layer, rowToPlaceSelectedTiles);
+    playAtLevel(rows, cols, tileTypes, numbersOfTilesByType, symbolsForTilesByType, allTilesInLayer, layer, rowToPlaceSelectedTiles);
     
 
 
-
+    delete[] numbersOfTilesByType;
     delete[] symbolsForTilesByType;
 
     for (int i = 0; i < rows; ++i)
