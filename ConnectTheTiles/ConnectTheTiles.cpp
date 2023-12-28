@@ -3,10 +3,11 @@
 #include <windows.h>
 #include <iomanip>
 
-unsigned const MIN_ROWS_COLS = 5, MAX_ROWS_COLS = 20;
-unsigned const MIN_TILE_TYPES = 8, MAX_TILE_TYPES = 20;
-unsigned const WHITE_COLOR_ATTRIBUTE = 7;
-unsigned const ROW_TO_PLACE_TILES_SIZE = 8;
+const unsigned MIN_ROWS_COLS = 5, MAX_ROWS_COLS = 20;
+const unsigned MIN_TILE_TYPES = 8, MAX_TILE_TYPES = 20;
+const unsigned WHITE_COLOR_ATTRIBUTE = 7;
+const unsigned ROW_TO_PLACE_TILES_SIZE = 8;
+const char EMPTY_POSITION = ' ';
 
 bool isSymbolValid(char symbol)
 {
@@ -66,11 +67,15 @@ void displayLayerOnConsoleUsingColors(size_t rows, size_t cols, size_t tileTypes
         {
             char currentSymbol = layer[i][j];
 
+            SetConsoleTextAttribute(hConsole, WHITE_COLOR_ATTRIBUTE);
+            std::cout << "|";
+
             int currentColorAttribute = getSymbolColor(tileTypes, symbolsForTilesByType, currentSymbol);
             SetConsoleTextAttribute(hConsole, currentColorAttribute);
 
-            std::cout << "|" << std::setw(2) << currentSymbol << " ";
+            std::cout << std::setw(2) << currentSymbol << " ";
         }
+        SetConsoleTextAttribute(hConsole, WHITE_COLOR_ATTRIBUTE);
         std::cout << "|" << std::endl;
 
         printHorizontalBoarderOfTable(cols);
@@ -162,62 +167,23 @@ void displayRowToPlaceSelectedTilesOnConsole(char rowToPlaceSelectedTiles[ROW_TO
     std::cout << std::endl;
 }
 
-char** createLevel(size_t& currentRows, size_t& currentCols, size_t& currentTileTypes, 
-    char*& currentSymbolsForTilesByType, unsigned& allTilesInLayer)
+char** createAndInitializeLayer(size_t rows, size_t cols)
 {
-    size_t rows, cols, tileTypes;
-
-    // validate input
-    do
-    {
-        std::cout << "Enter number of rows in the range [5, 20]: ";
-        std::cin >> rows;
-    } while (rows < MIN_ROWS_COLS || rows > MAX_ROWS_COLS);
-    currentRows = rows;
-
-    do
-    {
-        std::cout << "Enter number of cols in the range [5, 20]: ";
-        std::cin >> cols;
-    } while (cols < MIN_ROWS_COLS || cols > MAX_ROWS_COLS);
-    currentCols = cols;
-
-    do
-    {
-        std::cout << "Enter number of tile types in the range [8, 20]: ";
-        std::cin >> tileTypes;
-    } while (tileTypes < MIN_TILE_TYPES || tileTypes > MAX_TILE_TYPES || tileTypes * 3 >= rows * cols);  
-    currentTileTypes = tileTypes;
-
-
-    // create and initialize layer
     char** layer = new char* [rows];
     for (int i = 0; i < rows; ++i)
     {
         layer[i] = new char[cols];
-        std::fill_n(layer[i], cols, ' ');
+        std::fill_n(layer[i], cols, EMPTY_POSITION);
     }
 
-    // initialize symbols for tile types
-    char* symbolsForTilesByType = new char[tileTypes];
-    for (int i = 0; i < tileTypes; ++i)
-    {
-        char symbol;
+    return layer;
+}
 
-        do
-        {
-            std::cout << "Enter symbol for current tile type: ";
-            std::cin >> symbol;
-        } while (!isSymbolValid(symbol) || isSymbolPresent(tileTypes, symbol, symbolsForTilesByType));
-        
-        symbolsForTilesByType[i] = symbol;
-    }
-    delete[] currentSymbolsForTilesByType;
-    currentSymbolsForTilesByType = symbolsForTilesByType;
-
-    // generate number of tiles by type
+size_t* generateNumberOfTilesByType(size_t rows, size_t cols, size_t tileTypes, unsigned& allTilesInLayer)
+{
     size_t* numbersOfTilesByType = new size_t[tileTypes];
     srand(time(0));
+
     for (int i = 0; i < tileTypes; ++i)
     {
         size_t number;
@@ -226,11 +192,22 @@ char** createLevel(size_t& currentRows, size_t& currentCols, size_t& currentTile
         numbersOfTilesByType[i] = number;
         allTilesInLayer += number;
     }
-    // FOR DEBUGGING: numbers of tiles by type
-    for (int i = 0; i < tileTypes; ++i) std::cout << numbersOfTilesByType[i] << " ";
-    std::cout << std::endl << std::endl;
 
-    // generate position for each tile
+    return numbersOfTilesByType;
+}
+
+void generateValidPositionForCurrentTile(unsigned& row, unsigned& col, size_t rows, size_t cols, char**& layer)
+{
+    do
+    {
+        row = rand() % rows;
+        col = rand() % cols;
+    } while (layer[row][col] != EMPTY_POSITION);
+}
+
+void placeAllTilesOnRandomPositions(size_t rows, size_t cols, size_t tileTypes, 
+    size_t* numbersOfTilesByType, char* symbolsForTilesByType, char**& layer)
+{
     for (int i = 0; i < tileTypes; ++i)
     {
         size_t currentNumberOfTilesByType = numbersOfTilesByType[i];
@@ -241,15 +218,89 @@ char** createLevel(size_t& currentRows, size_t& currentCols, size_t& currentTile
             unsigned row;
             unsigned col;
 
-            do
-            {
-                row = rand() % rows;
-                col = rand() % cols;
-            } while (layer[row][col] != ' ');
+            generateValidPositionForCurrentTile(row, col, rows, cols, layer);
 
             layer[row][col] = currentSymbolByTileType;
         }
     }
+}
+
+char** createLevel(size_t& currentRows, size_t& currentCols, size_t& currentTileTypes, 
+    char*& currentSymbolsForTilesByType, unsigned& allTilesInLayer)
+{
+    size_t rows, cols, tileTypes;
+
+    // validate rows
+    std::cout << "Enter number of rows in the range [5, 20]: ";
+    std::cin >> rows;
+
+    while (rows < MIN_ROWS_COLS || rows > MAX_ROWS_COLS)
+    {
+        std::cout << "Invalid number of rows." << std::endl;
+
+        std::cout << "Enter number of rows in the range [5, 20]: ";
+        std::cin >> rows;
+    }
+    currentRows = rows;
+
+    // validate cols
+    std::cout << "Enter number of cols in the range [5, 20]: ";
+    std::cin >> cols;
+
+    while (cols < MIN_ROWS_COLS || cols > MAX_ROWS_COLS)
+    {
+        std::cout << "Invalid number of cols." << std::endl;
+
+        std::cout << "Enter number of cols in the range [5, 20]: ";
+        std::cin >> cols;
+    }
+    currentCols = cols;
+
+    // validate tile types
+    std::cout << "Enter number of tile types in the range [8, 20]: ";
+    std::cin >> tileTypes;
+
+    while (tileTypes < MIN_TILE_TYPES || tileTypes > MAX_TILE_TYPES || tileTypes * 3 >= rows * cols)
+    {
+        std::cout << "Invalid number of tile types." << std::endl;
+
+        std::cout << "Enter number of tile types in the range [8, 20]: ";
+        std::cin >> tileTypes;
+    }
+    currentTileTypes = tileTypes;
+
+
+    // create and initialize layer
+    char** layer = createAndInitializeLayer(rows, cols);
+
+    // initialize symbols for tile types
+    char* symbolsForTilesByType = new char[tileTypes];
+    for (int i = 0; i < tileTypes; ++i)
+    {
+        char symbol;
+        
+        // validate symbol
+        std::cout << "Enter symbol for current tile type: ";
+        std::cin >> symbol;
+
+        while (!isSymbolValid(symbol) || isSymbolPresent(tileTypes, symbol, symbolsForTilesByType))
+        {
+            std::cout << "Invalid symbol." << std::endl;
+
+            std::cout << "Enter symbol for current tile type: ";
+            std::cin >> symbol;
+        }
+        
+        symbolsForTilesByType[i] = symbol;
+    }
+    delete[] currentSymbolsForTilesByType;
+    currentSymbolsForTilesByType = symbolsForTilesByType;
+
+    // generate number of tiles by type
+    size_t* numbersOfTilesByType = generateNumberOfTilesByType(rows, cols, tileTypes, allTilesInLayer);
+
+    // generate position for each tile
+    placeAllTilesOnRandomPositions(rows, cols, tileTypes, numbersOfTilesByType, symbolsForTilesByType, layer);
 
     delete[] numbersOfTilesByType;
 
@@ -293,7 +344,7 @@ void playAtLevel(size_t rows, size_t cols, size_t tileTypes,
         }
 
         tile = layer[row][col];
-        layer[row][col] = ' ';
+        layer[row][col] = EMPTY_POSITION;
 
         --allTilesInLayer;
 
@@ -322,7 +373,7 @@ int main()
     displayLayerOnConsoleUsingColors(rows, cols, tileTypes, symbolsForTilesByType, layer);
 
     char rowToPlaceSelectedTiles[ROW_TO_PLACE_TILES_SIZE];
-    std::fill_n(rowToPlaceSelectedTiles, ROW_TO_PLACE_TILES_SIZE, ' ');
+    std::fill_n(rowToPlaceSelectedTiles, ROW_TO_PLACE_TILES_SIZE, EMPTY_POSITION);
     displayRowToPlaceSelectedTilesOnConsole(rowToPlaceSelectedTiles);
 
     playAtLevel(rows, cols, tileTypes, symbolsForTilesByType, allTilesInLayer, layer, rowToPlaceSelectedTiles);
