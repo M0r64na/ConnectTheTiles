@@ -7,10 +7,12 @@
 const unsigned MIN_ROWS_COLS = 5, MAX_ROWS_COLS = 20;
 const unsigned MIN_TILE_TYPES = 8, MAX_TILE_TYPES = 20;
 const unsigned WHITE_COLOR_ATTRIBUTE = 7;
+const unsigned BRIGHT_YELLOW_COLOR_ATTRIBUTE = 14;
 const unsigned ROW_TO_PLACE_TILES_SIZE = 8;
 const char EMPTY_POSITION = ' ';
 const unsigned MIN_LEVELS_IN_GAME = 1, MAX_LEVELS_IN_GAME = 10;
 const unsigned TOP_LEVEL_INDEX = 0;
+const unsigned MAX_CMD_SIZE = 5;
 
 bool isSymbolValid(char symbol)
 {
@@ -49,6 +51,16 @@ unsigned getSymbolColor(size_t tileTypes, char* symbolsForTilesByType, char curr
     return currentColorAttribute;
 }
 
+void displayStartGameMsg()
+{
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    SetConsoleTextAttribute(hConsole, BRIGHT_YELLOW_COLOR_ATTRIBUTE);
+
+    std::cout << "ThE GaMe Is StaRTiNG... ArE YooOU ReeeADy?" << std::endl;
+
+    SetConsoleTextAttribute(hConsole, WHITE_COLOR_ATTRIBUTE);
+}
+
 void printHorizontalBoarderOfTable(size_t cols)
 {
     std::cout << "+";
@@ -59,13 +71,13 @@ void printHorizontalBoarderOfTable(size_t cols)
     std::cout << std::endl;
 }
 
-void displayGameOnConsoleUsingColors(size_t rows, size_t cols, size_t tileTypes, char* symbolsForTilesByType, char*** levels)
+void displayLevelOnConsoleUsingColors(size_t rows, size_t cols, size_t tileTypes, unsigned currentLevelIndex, char* symbolsForTilesByType, char*** levels)
 {
     printHorizontalBoarderOfTable(cols);
 
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
-    char** currentLevel = levels[TOP_LEVEL_INDEX];
+    char** currentLevel = levels[currentLevelIndex];
 
     for (int i = 0; i < rows; ++i)
     {
@@ -153,7 +165,7 @@ void removeTileFromRowWithSelectedTiles(char tile, char(&rowToPlaceSelectedTiles
         {
             rowToPlaceSelectedTiles[j] = rowToPlaceSelectedTiles[j + 1];
         }
-        
+
         --i;
     }
 }
@@ -369,7 +381,59 @@ void countInitialTilesInTopLayer(size_t tileTypes, unsigned& visibleTiles, size_
     }
 }
 
-char** createLevel(size_t rows, size_t cols, size_t tileTypes, 
+
+void readAndValidateCmd(char*& cmd)
+{
+    std::cout << "Enter command: ";
+    std::cin.getline(cmd, MAX_CMD_SIZE, '\n');
+
+    while (strcmp(cmd, "UP") != 0 && strcmp(cmd, "DOWN") != 0 && strcmp(cmd, "EXIT") != 0)
+    {
+        std::cout << "Invalid command." << std::endl;
+
+        std::cout << "Enter command: ";
+        std::cin.getline(cmd, MAX_CMD_SIZE, '\n');
+    }
+}
+
+void navigateThroughGame(size_t rowsInLevel, size_t colsInLevel, size_t tileTypes, size_t numbersOfLevels, char* symbolsForTilesByType, char*** levels)
+{
+    unsigned currentLevelIndex = 0;
+
+    char* cmd = new char[MAX_CMD_SIZE]();
+    std::cin.ignore();
+    readAndValidateCmd(cmd);
+
+    while (strcmp(cmd, "EXIT") != 0)
+    {
+        if (strcmp(cmd, "UP") == 0)
+        {
+            if (currentLevelIndex == 0) std::cout << "No upper layer present." << std::endl;
+            else
+            {
+                --currentLevelIndex;
+                displayLevelOnConsoleUsingColors(rowsInLevel, colsInLevel, tileTypes, currentLevelIndex, symbolsForTilesByType, levels);
+            }
+        }
+        else
+        {
+            if (currentLevelIndex == numbersOfLevels - 1) std::cout << "No lower layer present." << std::endl;
+            else
+            {
+                ++currentLevelIndex;
+                displayLevelOnConsoleUsingColors(rowsInLevel, colsInLevel, tileTypes, currentLevelIndex, symbolsForTilesByType, levels);
+            }
+        }
+
+        readAndValidateCmd(cmd);
+    }
+
+    displayLevelOnConsoleUsingColors(rowsInLevel, colsInLevel, tileTypes, TOP_LEVEL_INDEX, symbolsForTilesByType, levels);
+
+    delete[] cmd;
+}
+
+char** createLevel(size_t rows, size_t cols, size_t tileTypes,
     char* symbolsForTilesByType, int currentLevelIndex, size_t**& numbersOfTilesByTypeByLevel)
 {
     // create and initialize level
@@ -397,17 +461,24 @@ void restartGame(size_t rowsInLevel, size_t colsInLevel, size_t tileTypes, size_
         placeAllTilesOnRandomPositions(rowsInLevel, colsInLevel, tileTypes, numbersOfTilesByTypeByLevel[i], symbolsForTilesByType, level);
     }
 
+    countInitialTilesInTopLayer(tileTypes, visibleTiles, numbersOfTilesByTypeByLevel);
+
+    displayLevelOnConsoleUsingColors(rowsInLevel, colsInLevel, tileTypes, TOP_LEVEL_INDEX, symbolsForTilesByType, levels);
+    navigateThroughGame(rowsInLevel, colsInLevel, tileTypes, numberOfLevels, symbolsForTilesByType, levels);
+
     fillEmptyPositionsInCurrentLevel(rowsInLevel, colsInLevel, numberOfLevels, levels, visibleTiles);
-    displayGameOnConsoleUsingColors(rowsInLevel, colsInLevel, tileTypes, symbolsForTilesByType, levels);
+
+    displayStartGameMsg();
+    displayLevelOnConsoleUsingColors(rowsInLevel, colsInLevel, tileTypes, TOP_LEVEL_INDEX, symbolsForTilesByType, levels);
 
     initializeRowToPlaceSelectedTiles(rowToPlaceSelectedTiles);
     displayRowToPlaceSelectedTilesOnConsole(rowToPlaceSelectedTiles);
 }
 
 void playGame(size_t rowsInLevel, size_t colsInLevel, size_t tileTypes, size_t numberOfLevels,
-    size_t** numbersOfTilesByTypeByLevel, char* symbolsForTilesByType, 
+    size_t** numbersOfTilesByTypeByLevel, char* symbolsForTilesByType,
     unsigned& visibleTiles,
-    char***& levels, char (&rowToPlaceSelectedTiles)[ROW_TO_PLACE_TILES_SIZE])
+    char***& levels, char(&rowToPlaceSelectedTiles)[ROW_TO_PLACE_TILES_SIZE])
 {
     unsigned row, col;
     char tile;
@@ -462,7 +533,7 @@ void playGame(size_t rowsInLevel, size_t colsInLevel, size_t tileTypes, size_t n
 
         fillEmptyPositionsInCurrentLevel(rowsInLevel, colsInLevel, numberOfLevels, levels, visibleTiles);
 
-        displayGameOnConsoleUsingColors(rowsInLevel, colsInLevel, tileTypes, symbolsForTilesByType, levels);
+        displayLevelOnConsoleUsingColors(rowsInLevel, colsInLevel, tileTypes, TOP_LEVEL_INDEX, symbolsForTilesByType, levels);
         displayRowToPlaceSelectedTilesOnConsole(rowToPlaceSelectedTiles);
 
         result = areThereTilesToRemove(tile, rowToPlaceSelectedTiles);
@@ -490,26 +561,11 @@ char*** createGame(size_t& rowsInLevel, size_t& colsInLevel, size_t& tileTypes, 
     for (int i = 0; i < numberOfLevels; ++i)
     {
         levels[i] = createLevel(rowsInLevel, colsInLevel, tileTypes, symbolsForTilesByType, i, numbersOfTilesByTypeByLevel);
-        
-        // DEBUG
-        std::cout << "Layer index: " << i << std::endl;
-        for (int j = 0; j < rowsInLevel; ++j)
-        {
-            for (int k = 0; k < colsInLevel; ++k)
-            {
-                std::cout << levels[i][j][k] << "\t";
-            }
-            std::cout << std::endl;
-        }
-        std::cout << std::endl;
     }
 
     countInitialTilesInTopLayer(tileTypes, visibleTiles, numbersOfTilesByTypeByLevel);
-    fillEmptyPositionsInCurrentLevel(rowsInLevel, colsInLevel, numberOfLevels, levels, visibleTiles);
 
-    std::cout << "Visible tiles: " << visibleTiles << std::endl;
-
-    displayGameOnConsoleUsingColors(rowsInLevel, colsInLevel, tileTypes, symbolsForTilesByType, levels);
+    displayLevelOnConsoleUsingColors(rowsInLevel, colsInLevel, tileTypes, TOP_LEVEL_INDEX, symbolsForTilesByType, levels);
 
     return levels;
 }
@@ -517,15 +573,36 @@ char*** createGame(size_t& rowsInLevel, size_t& colsInLevel, size_t& tileTypes, 
 int main()
 {
     auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-    srand((unsigned) seed);
+    srand((unsigned)seed);
 
     size_t rowsInLevel, colsInLevel, tileTypes, numberOfLevels;
-    
+
     unsigned visibleTiles = 0;
     char* symbolsForTilesByType = new char[MAX_TILE_TYPES];
-    size_t** numbersOfTilesByTypeByLevel = new size_t*[MAX_LEVELS_IN_GAME];
+    size_t** numbersOfTilesByTypeByLevel = new size_t * [MAX_LEVELS_IN_GAME];
 
+    // create the game
     char*** levels = createGame(rowsInLevel, colsInLevel, tileTypes, numberOfLevels, visibleTiles, symbolsForTilesByType, numbersOfTilesByTypeByLevel);
+
+    /* navigate through the game :)
+    * 
+    * give the player opportunity to see and memorize
+    * the generated layers by the game
+    */
+    navigateThroughGame(rowsInLevel, colsInLevel, tileTypes, numberOfLevels, symbolsForTilesByType, levels);
+
+    // fill empty positions in the game if possible
+    fillEmptyPositionsInCurrentLevel(rowsInLevel, colsInLevel, numberOfLevels, levels, visibleTiles);
+
+    /* start the game :)
+    *
+    * display welcome msg
+    * display the game after initial filling of empty positions
+    * display the row to place selected tiles
+    * invoke playGame(...) function to finally start the game
+    */
+    displayStartGameMsg();
+    displayLevelOnConsoleUsingColors(rowsInLevel, colsInLevel, tileTypes, TOP_LEVEL_INDEX, symbolsForTilesByType, levels);
 
     char rowToPlaceSelectedTiles[ROW_TO_PLACE_TILES_SIZE];
     initializeRowToPlaceSelectedTiles(rowToPlaceSelectedTiles);
@@ -535,14 +612,17 @@ int main()
         numbersOfTilesByTypeByLevel, symbolsForTilesByType,
         visibleTiles, levels, rowToPlaceSelectedTiles);
 
+    // deallocate memory for symbols per tile types
     delete[] symbolsForTilesByType;
 
+    // deallocate memory for numbers of tiles by type and level
     for (int i = 0; i < numberOfLevels; ++i)
     {
         delete[] numbersOfTilesByTypeByLevel[i];
     }
     delete[] numbersOfTilesByTypeByLevel;
 
+    // deallocate memory for levels
     for (int i = 0; i < numberOfLevels; ++i)
     {
         for (int j = 0; j < rowsInLevel; ++j)
